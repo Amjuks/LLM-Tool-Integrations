@@ -1,0 +1,50 @@
+{
+  "tools": [
+    {
+      "domain": "puzzle",
+      "name": "sudoku_solver",
+      "module": "tools.sudoku.sudoku_tool",
+      "description": "Solve a 9x9 Sudoku puzzle from a list of rows with digits and empty cells.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "puzzle": {
+            "type": "array",
+            "description": "Nine rows representing the Sudoku board. Use digits 1-9 and 0 or . for blanks.",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9.]{9}$"
+            },
+            "minItems": 9,
+            "maxItems": 9
+          }
+        },
+        "required": ["puzzle"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9]{9}$"
+            },
+            "minItems": 9,
+            "maxItems": 9
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array", "string"],
+      "validation_rules": [
+        "Puzzle must contain exactly 9 rows.",
+        "Each row must be exactly 9 characters.",
+        "Empty cells may be represented by 0 or .",
+        "Solution must return 9 rows with digits 1-9."
+      ]
+    }
+  ]
+}
