@@ -59,19 +59,54 @@ def extract_sudoku_string(text: str) -> str | None:
     return None
 
 
-def normalize_sudoku_tool_input(prompt: str, tool_input: dict) -> dict:
-    puzzle = tool_input.get("puzzle")
-    if not isinstance(puzzle, list) or len(puzzle) != 9:
-        return tool_input
+def _normalize_sudoku_cell(cell: str) -> str:
+    value = cell.strip()
+    if not value or value == "." or value == "0":
+        return "."
+    if value[0] in "123456789":
+        return value[0]
+    return "."
 
-    if any(not isinstance(row, str) or len(row) != 9 for row in puzzle):
-        return tool_input
 
-    raw = extract_sudoku_string(prompt)
-    if not raw:
-        return tool_input
+def parse_sudoku_markdown_table(text: str) -> list[str] | None:
+    rows: list[str] = []
+    for line in text.splitlines():
+        if "|" not in line:
+            continue
+        if re.fullmatch(r"[\s|:\-]+", line):
+            continue
 
-    puzzle_rows = [raw[i * 9 : (i + 1) * 9] for i in range(9)]
-    if "".join(puzzle) != raw:
-        return {"puzzle": puzzle_rows}
-    return tool_input
+        parts = line.split("|")
+        if parts and parts[0].strip() == "" and parts[-1].strip() == "":
+            parts = parts[1:-1]
+
+        if len(parts) != 9:
+            continue
+
+        row = "".join(_normalize_sudoku_cell(part) for part in parts)
+        if len(row) == 9:
+            rows.append(row)
+
+    return rows if len(rows) == 9 else None
+
+
+def parse_sudoku_rows(text: str) -> list[str] | None:
+    board = parse_sudoku_markdown_table(text)
+    if board:
+        return board
+
+    raw = extract_sudoku_string(text)
+    if raw and len(raw) == 81:
+        return [raw[i * 9 : (i + 1) * 9] for i in range(9)]
+
+    candidate: list[str] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        cells = re.findall(r"[0-9.]", line)
+        if len(cells) == 9:
+            candidate.append("".join(cells))
+    if len(candidate) >= 9:
+        return candidate[:9]
+
+    return None

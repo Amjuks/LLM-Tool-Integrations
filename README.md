@@ -34,4 +34,4 @@ python main.py
 
 ## Sudoku Example
 
-The first tool is a Sudoku solver at `tools/sudoku/`. The tool accepts 9 rows of digits and blanks (`0` or `.`) and returns a completed Sudoku board.
+The first tool is a Sudoku solver at `tools/sudoku/`.

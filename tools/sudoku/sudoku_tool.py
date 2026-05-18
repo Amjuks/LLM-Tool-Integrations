@@ -4,13 +4,11 @@ from typing import Any, Dict, List
 def run(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     puzzle = input_data.get("puzzle")
-    # Accept a single string of 81 chars or a list of 9 strings
     if isinstance(puzzle, str):
         if len(puzzle) != 81:
             raise ValueError("If puzzle is a string, it must be exactly 81 characters.")
         puzzle_rows = [puzzle[i*9:(i+1)*9] for i in range(9)]
     elif isinstance(puzzle, list) and len(puzzle) == 9:
-        # Normalize: trim whitespace and check length
         puzzle_rows = []
         for idx, row in enumerate(puzzle):
             if not isinstance(row, str):

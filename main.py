@@ -7,10 +7,10 @@ from tools.tool_runner import ToolRunner
 from tools.utils import (
     color,
     extract_json_object,
-    normalize_sudoku_tool_input,
+    parse_sudoku_rows,
     print_stage,
 )
-from tools.validators import validate_tool_dispatch
+from tools.validators import validate_schema, validate_tool_dispatch
 
 
 def load_tool_registry() -> dict:
@@ -25,8 +25,23 @@ def main() -> None:
     llm = LLMClient()
     runner = ToolRunner(registry)
 
+    def read_multiline_prompt() -> str:
+        print(color("\nEnter prompt (or type EXIT to quit). Finish with an empty line:", "green"))
+        lines: list[str] = []
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                break
+            if line == "":
+                break
+            lines.append(line)
+
+        prompt_text = "\n".join(lines).strip()
+        return prompt_text
+
     while True:
-        prompt = input(color("\nEnter prompt (or type EXIT to quit): ", "green")).strip()
+        prompt = read_multiline_prompt()
         if not prompt:
             continue
         if prompt.lower() in {"exit", "quit", "q"}:
@@ -62,16 +77,70 @@ def main() -> None:
             print_stage("Final response", final_answer)
             continue
 
-        if selection["tool_name"] == "sudoku_solver":
-            normalized_input = normalize_sudoku_tool_input(prompt, selection["tool_input"])
-            if normalized_input != selection["tool_input"]:
-                selection["tool_input"] = normalized_input
-                print_stage("Normalized puzzle input", json.dumps(normalized_input, indent=2))
-
         tool_name = selection["tool_name"]
+        tool = next((tool for tool in registry.get("tools", []) if tool.get("name") == tool_name), None)
+        if tool is None:
+            print(color(f"Selected tool '{tool_name}' is not registered.", "red"))
+            continue
+
+        tool_schema = tool["input_schema"]
         print_stage("Tool needed", "Yes")
         print_stage("Selected tool", tool_name)
-        print_stage("Input payload", json.dumps(selection["tool_input"], indent=2))
+
+        if tool_name == "sudoku_solver":
+            parsed_rows = parse_sudoku_rows(prompt)
+            if parsed_rows is not None:
+                selection["tool_input"] = {"puzzle": parsed_rows}
+                print_stage("Tool input normalization", "Parsed Sudoku board from prompt locally")
+                print_stage("Input payload", json.dumps(selection["tool_input"], indent=2))
+            else:
+                print_stage("Tool input normalization", "Normalizing user prompt into the selected tool schema")
+                tool_input_response = llm.query_tool_input(prompt, tool_name, tool_schema)
+                print_stage("Normalized tool input output", tool_input_response)
+
+                normalized_json = extract_json_object(tool_input_response)
+                if normalized_json is None:
+                    print(color("Failed to extract JSON from the tool input normalization response.", "red"))
+                    continue
+
+                try:
+                    tool_input = json.loads(normalized_json)
+                except json.JSONDecodeError as exc:
+                    print(color(f"JSON decode error: {exc}", "red"))
+                    continue
+
+                try:
+                    validate_schema(tool_input, tool_schema)
+                except ValueError as exc:
+                    print(color(f"Tool input normalization failed schema validation: {exc}", "red"))
+                    continue
+
+                selection["tool_input"] = tool_input
+                print_stage("Input payload", json.dumps(selection["tool_input"], indent=2))
+        else:
+            print_stage("Tool input normalization", "Normalizing user prompt into the selected tool schema")
+            tool_input_response = llm.query_tool_input(prompt, tool_name, tool_schema)
+            print_stage("Normalized tool input output", tool_input_response)
+
+            normalized_json = extract_json_object(tool_input_response)
+            if normalized_json is None:
+                print(color("Failed to extract JSON from the tool input normalization response.", "red"))
+                continue
+
+            try:
+                tool_input = json.loads(normalized_json)
+            except json.JSONDecodeError as exc:
+                print(color(f"JSON decode error: {exc}", "red"))
+                continue
+
+            try:
+                validate_schema(tool_input, tool_schema)
+            except ValueError as exc:
+                print(color(f"Tool input normalization failed schema validation: {exc}", "red"))
+                continue
+
+            selection["tool_input"] = tool_input
+            print_stage("Input payload", json.dumps(selection["tool_input"], indent=2))
 
         try:
             tool_result = runner.execute_tool(selection)

@@ -27,6 +27,11 @@ class LLMClient:
         response = self._send_chat_request(instruction)
         return response
 
+    def query_tool_input(self, prompt: str, tool_name: str, tool_schema: Dict[str, Any]) -> str:
+        instruction = self._build_tool_input_instruction(prompt, tool_name, tool_schema)
+        response = self._send_chat_request(instruction)
+        return response
+
     def query_final_response(
         self,
         prompt: str,
@@ -72,11 +77,37 @@ class LLMClient:
                     "- tool_required: true or false\n"
                     "- tool_name: the tool name if required, otherwise null\n"
                     "- tool_input: object matching the selected tool input schema or {}\n\n"
-                    "If the user provides a Sudoku puzzle in any format (single string, grid, or list), always convert it to a list of 9 strings, each exactly 9 characters, using only digits 1-9 and dots (.) for blanks. "
-                    "Preserve the exact character order of the original puzzle when normalizing rows. Do not add, remove, or alter any digits. "
-                    "If a row is too short, pad with dots at the end. If a row is too long, truncate to 9 characters. "
-                    "If the original input is a single 81-character puzzle string, the concatenation of the 9 rows must equal that exact string. "
-                    "If the provided board is invalid or unsolvable, do not force a solve. Instead, return a tool error or require a valid puzzle."
+                    "Only decide whether the prompt requires a tool and which tool should be used. "
+                    "Do not perform schema-specific input normalization in this step. "
+                    "If a tool is selected, tool_input may be {} here and will be normalized separately."
+                ),
+            },
+        ]
+
+    def _build_tool_input_instruction(
+        self,
+        prompt: str,
+        tool_name: str,
+        tool_schema: Dict[str, Any],
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You are a tool input normalizer. You will receive a user prompt, the name of a selected tool, "
+                    "and the tool's exact input schema. Your job is to return a JSON object that exactly matches the schema. "
+                    "Respond only with valid JSON and do not include any explanatory text outside the JSON object."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Tool name: {tool_name}\n"
+                    f"Tool input schema:\n{json.dumps(tool_schema, indent=2)}\n\n"
+                    f"User prompt:\n{prompt}\n\n"
+                    "Interpret the prompt and normalize the user input into the exact structure required by the schema. "
+                    "Return only a JSON object that conforms to the schema. "
+                    "Do not include any extra properties or comments."
                 ),
             },
         ]
