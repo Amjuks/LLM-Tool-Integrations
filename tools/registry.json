@@ -45,6 +45,312 @@
         "Empty cells may be represented by 0 or .",
         "Solution must return 9 rows with digits 1-9."
       ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "nonograms_solver",
+      "module": "tools.nonograms.nonograms_tool",
+      "description": "Solve a Nonograms puzzle from row and column clue arrays.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "row_clues": {
+            "type": "array",
+            "description": "Row clues as arrays of non-negative integers.",
+            "items": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0 }
+            },
+            "minItems": 1
+          },
+          "col_clues": {
+            "type": "array",
+            "description": "Column clues as arrays of non-negative integers.",
+            "items": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0 }
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["row_clues", "col_clues"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solution rows using X for filled cells and . for empty cells.",
+            "items": {
+              "type": "string",
+              "pattern": "^[X.]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array"],
+      "validation_rules": [
+        "Row and column clue arrays must be present.",
+        "Clue entries must be non-negative integers.",
+        "The row and column lengths must be consistent with the clues."
+      ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "nurikabe_solver",
+      "module": "tools.nurikabe.nurikabe_tool",
+      "description": "Solve a Nurikabe puzzle from a numbered grid layout.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "grid": {
+            "type": "array",
+            "description": "Rows of the Nurikabe grid using digits for island sizes and . for empty sea candidates.",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9.]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["grid"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solution rows using 1 for island cells and 0 for sea cells.",
+            "items": {
+              "type": "string",
+              "pattern": "^[01]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array", "string"],
+      "validation_rules": [
+        "Grid rows must all be the same length.",
+        "Numbered cells must be positive digits.",
+        "The output must use 1 for islands and 0 for sea."
+      ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "star_battle_solver",
+      "module": "tools.star_battle.star_battle_tool",
+      "description": "Solve a Star Battle puzzle from a region map with a fixed number of stars per region.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "regions": {
+            "type": "array",
+            "description": "A grid of region labels, where each row is an array of single-character strings.",
+            "items": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 1 }
+            },
+            "minItems": 1
+          },
+          "stars_per_region": {
+            "type": "integer",
+            "description": "Number of stars required in each row, column, and region.",
+            "minimum": 1,
+            "default": 2
+          }
+        },
+        "required": ["regions"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solution rows using * for stars and . for empty cells.",
+            "items": {
+              "type": "string",
+              "pattern": "^[*.]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array"],
+      "validation_rules": [
+        "regions must form a rectangular grid.",
+        "Each row, column, and region must contain the specified number of stars.",
+        "Stars may not touch each other, even diagonally."
+      ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "hitori_solver",
+      "module": "tools.hitori.hitori_tool",
+      "description": "Solve a Hitori puzzle from a numeric grid.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "grid": {
+            "type": "array",
+            "description": "Rows of digits representing the Hitori puzzle.",
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["grid"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solution rows using W for white cells and B for black cells.",
+            "items": {
+              "type": "string",
+              "pattern": "^[BW]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array", "string"],
+      "validation_rules": [
+        "Each row must contain only digits 1-9.",
+        "No duplicate white numbers may appear in the same row or column.",
+        "Black cells must not be orthogonally adjacent and white cells must remain connected."
+      ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "kakuro_solver",
+      "module": "tools.kakuro.kakuro_tool",
+      "description": "Solve a Kakuro puzzle from a structured clue grid.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "description": "Rows of cell definitions. Use '.' for white cells, 'X' or 'black' for blocks, 'rN' for row clues, 'cN' for column clues, and 'rNcM' for combined clues.",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:\\.|x|black|#|r\\d+(?:c\\d+)?|c\\d+)$"
+              }
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["cells"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solved grid rows with digits in white cells and . in black cells.",
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9.]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array", "string"],
+      "validation_rules": [
+        "Clue rows must form a consistent rectangular grid.",
+        "Rows and columns must satisfy the provided sums.",
+        "White cells may contain digits 1-9 only."
+      ]
+    },
+    {
+      "domain": "puzzle",
+      "name": "kenken_solver",
+      "module": "tools.kenken.kenken_tool",
+      "description": "Solve a KenKen puzzle from a size and cage definitions.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "integer",
+            "description": "The width and height of the KenKen grid.",
+            "minimum": 3,
+            "maximum": 9
+          },
+          "cages": {
+            "type": "array",
+            "description": "Cage definitions with target, operation, and cell coordinates.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "row": { "type": "integer", "minimum": 0 },
+                      "col": { "type": "integer", "minimum": 0 }
+                    },
+                    "required": ["row", "col"],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1
+                },
+                "target": { "type": "integer", "minimum": 1 },
+                "operation": { "type": "string", "enum": ["add", "mul", "sub", "div", "none"] }
+              },
+              "required": ["cells", "target", "operation"],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["size", "cages"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "solution": {
+            "type": "array",
+            "description": "Solved grid rows using digits 1 through size.",
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9]+$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["solution"],
+        "additionalProperties": false
+      },
+      "supported_data_types": ["object", "array", "string"],
+      "validation_rules": [
+        "Cages must cover every cell exactly once.",
+        "Subtraction and division cages must contain exactly two cells.",
+        "The solution must fill every row and column with 1..size without repetition."
+      ]
     }
   ]
 }

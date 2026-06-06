@@ -22,14 +22,31 @@ class LLMClient:
 
         self.client = OpenAI(**client_args)
 
-    def query_tool_selection(self, prompt: str, registry: Dict[str, Any]) -> str:
+    def query_tool_selection(self, prompt: str, registry: Dict[str, Any], history: list[dict[str, str]] | None = None) -> str:
         instruction = self._build_tool_selection_instruction(prompt, registry)
-        response = self._send_chat_request(instruction)
+        response = self._send_chat_request(instruction, history)
         return response
 
-    def query_tool_input(self, prompt: str, tool_name: str, tool_schema: Dict[str, Any]) -> str:
-        instruction = self._build_tool_input_instruction(prompt, tool_name, tool_schema)
-        response = self._send_chat_request(instruction)
+    def query_tool_input(
+        self,
+        prompt: str,
+        tool_name: str,
+        tool_schema: Dict[str, Any],
+        previous_response: str | None = None,
+        validation_errors: str | None = None,
+        history: list[dict[str, str]] | None = None,
+    ) -> str:
+        if previous_response is None:
+            instruction = self._build_tool_input_instruction(prompt, tool_name, tool_schema)
+        else:
+            instruction = self._build_tool_input_correction_instruction(
+                prompt,
+                tool_name,
+                tool_schema,
+                previous_response,
+                validation_errors,
+            )
+        response = self._send_chat_request(instruction, history)
         return response
 
     def query_final_response(
@@ -39,6 +56,7 @@ class LLMClient:
         tool_output: Dict[str, Any] | None,
         analysis_response: str,
         tool_error: str | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> str:
         messages = [
             {
@@ -55,7 +73,7 @@ class LLMClient:
                 ),
             },
         ]
-        return self._send_chat_request(messages)
+        return self._send_chat_request(messages, history)
 
     def _build_tool_selection_instruction(self, prompt: str, registry: Dict[str, Any]) -> list[dict[str, str]]:
         tool_list = json.dumps(registry, indent=2)
@@ -76,10 +94,10 @@ class LLMClient:
                     "Return JSON with the following fields:\n"
                     "- tool_required: true or false\n"
                     "- tool_name: the tool name if required, otherwise null\n"
-                    "- tool_input: object matching the selected tool input schema or {}\n\n"
+                    "- tool_input: {} (tool input will be generated in a second AI call after selection)\n\n"
                     "Only decide whether the prompt requires a tool and which tool should be used. "
                     "Do not perform schema-specific input normalization in this step. "
-                    "If a tool is selected, tool_input may be {} here and will be normalized separately."
+                    "If a tool is selected, tool_input must be {} and a separate AI call will format it to the tool schema."
                 ),
             },
         ]
@@ -96,7 +114,7 @@ class LLMClient:
                 "content": (
                     "You are a tool input normalizer. You will receive a user prompt, the name of a selected tool, "
                     "and the tool's exact input schema. Your job is to return a JSON object that exactly matches the schema. "
-                    "Respond only with valid JSON and do not include any explanatory text outside the JSON object."
+                    "Respond only with valid JSON and do not include any explanatory text, markdown, or code fences."
                 ),
             },
             {
@@ -106,8 +124,46 @@ class LLMClient:
                     f"Tool input schema:\n{json.dumps(tool_schema, indent=2)}\n\n"
                     f"User prompt:\n{prompt}\n\n"
                     "Interpret the prompt and normalize the user input into the exact structure required by the schema. "
-                    "Return only a JSON object that conforms to the schema. "
-                    "Do not include any extra properties or comments."
+                    "Return only a JSON object that conforms exactly to the schema, with all required fields present. "
+                    "If the user prompt contains a drawn board or grid with separators (such as |, +, -, spaces), ignore those characters and map the data into the schema fields. "
+                    "If the prompt includes a parsed board section, use those values exactly. "
+                    "Do not include any extra properties, comments, or text outside the JSON object."
+                ),
+            },
+        ]
+
+    def _build_tool_input_correction_instruction(
+        self,
+        prompt: str,
+        tool_name: str,
+        tool_schema: Dict[str, Any],
+        previous_response: str,
+        validation_errors: str | None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You are a tool input normalizer. A previous attempt to format the input failed validation. "
+                    "You must now return a corrected JSON object that exactly matches the schema. "
+                    "Respond only with valid JSON and do not include any explanatory text, markdown, or code fences."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Tool name: {tool_name}\n"
+                    f"Tool input schema:\n{json.dumps(tool_schema, indent=2)}\n\n"
+                    f"User prompt:\n{prompt}\n\n"
+                    "Previous tool input output:\n"
+                    f"{previous_response}\n\n"
+                    "Validation errors:\n"
+                    f"{validation_errors}\n\n"
+                    "Produce a corrected JSON object that conforms exactly to the tool schema. "
+                    "Use the exact schema field names and convert any drawn board, separator-based grid, or natural language clues into the required JSON structure. "
+                    "If the prompt includes a parsed board section, use those values exactly. "
+                    "Do not infer fields beyond those defined by the tool schema. "
+                    "Do not include any extra properties, comments, or text outside the JSON object."
                 ),
             },
         ]
@@ -135,10 +191,14 @@ class LLMClient:
             + json.dumps(payload, indent=2)
         )
 
-    def _send_chat_request(self, messages: list[dict[str, str]]) -> str:
+    def _send_chat_request(self, messages: list[dict[str, str]], history: list[dict[str, str]] | None = None) -> str:
+        combined_messages = []
+        if history:
+            combined_messages.extend(history)
+        combined_messages.extend(messages)
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=combined_messages,
             temperature=0,
             max_tokens=800,
         )

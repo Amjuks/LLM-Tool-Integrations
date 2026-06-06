@@ -12,9 +12,14 @@ def validate_schema(instance: Any, schema: Dict[str, Any]) -> None:
 
 def format_error(error: jsonschema.ValidationError) -> str:
     path = ".".join(str(p) for p in error.absolute_path)
+    schema_path = ".".join(str(p) for p in error.absolute_schema_path)
     if path:
-        return f"{path}: {error.message}"
-    return error.message
+        message = f"{path}: {error.message}"
+    else:
+        message = error.message
+    if schema_path:
+        message = f"{message} (schema path: {schema_path})"
+    return message
 
 
 def validate_tool_dispatch(selection: Any, registry: Dict[str, Any]) -> Dict[str, Any]:
@@ -38,8 +43,9 @@ def validate_tool_dispatch(selection: Any, registry: Dict[str, Any]) -> Dict[str
         tool = next((tool for tool in registry.get("tools", []) if tool.get("name") == tool_name), None)
         if tool is None:
             raise ValueError(f"Tool '{tool_name}' is not present in the registry.")
-        if tool_input:
-            validate_schema(tool_input, tool["input_schema"])
+        # Ignore any partial tool_input supplied during tool selection.
+        # A second AI call will format the final tool_input exactly to the selected tool schema.
+        tool_input = {}
     else:
         tool_name = None
         tool_input = {}
