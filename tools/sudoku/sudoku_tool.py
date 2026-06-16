@@ -1,24 +1,54 @@
-from typing import Any, Dict, List
+import re
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def run(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     puzzle = input_data.get("puzzle")
-    if isinstance(puzzle, str):
-        if len(puzzle) != 81:
-            raise ValueError("If puzzle is a string, it must be exactly 81 characters.")
-        puzzle_rows = [puzzle[i*9:(i+1)*9] for i in range(9)]
-    elif isinstance(puzzle, list) and len(puzzle) == 9:
-        puzzle_rows = []
-        for idx, row in enumerate(puzzle):
-            if not isinstance(row, str):
-                raise ValueError(f"Puzzle row {idx+1} is not a string.")
-            row = row.strip()
-            if len(row) != 9:
-                raise ValueError(f"Puzzle row {idx+1} must be exactly 9 characters, got {len(row)}: '{row}'")
-            puzzle_rows.append(row)
+    if isinstance(puzzle, list) and len(puzzle) == 9:
+        if all(isinstance(row, list) for row in puzzle):
+            puzzle_rows = []
+            for row_index, row in enumerate(puzzle):
+                if not isinstance(row, list):
+                    raise ValueError(f"Puzzle row {row_index+1} must be a list of 9 cell values.")
+                if len(row) != 9:
+                    raise ValueError(f"Puzzle row {row_index+1} must contain exactly 9 cells, got {len(row)}.")
+                row_chars: List[str] = []
+                for col_index, cell in enumerate(row):
+                    if not isinstance(cell, str) or len(cell) != 1:
+                        raise ValueError(
+                            f"Puzzle cell at row {row_index+1}, column {col_index+1} must be a single character string."
+                        )
+                    normalized_cell = cell if cell != "0" else "."
+                    if normalized_cell == ".":
+                        row_chars.append(normalized_cell)
+                    elif normalized_cell.isdigit() and normalized_cell != "0":
+                        row_chars.append(normalized_cell)
+                    else:
+                        raise ValueError(
+                            f"Puzzle cell at row {row_index+1}, column {col_index+1} must be a digit 1-9 or '.'."
+                        )
+                puzzle_rows.append("".join(row_chars))
+        elif all(isinstance(row, str) for row in puzzle):
+            puzzle_rows = []
+            for idx, row in enumerate(puzzle):
+                if not isinstance(row, str):
+                    raise ValueError(f"Puzzle row {idx+1} is not a string.")
+                row = row.strip().replace("0", ".")
+                if len(row) != 9:
+                    raise ValueError(f"Puzzle row {idx+1} must be exactly 9 characters, got {len(row)}: '{row}'")
+                puzzle_rows.append(row)
+        else:
+            raise ValueError("Puzzle must be a list of 9 rows, each either an array of 9 cells or a 9-character string.")
+    elif isinstance(puzzle, str):
+        puzzle_str = puzzle.strip()
+        if len(puzzle_str) == 81 and re.fullmatch(r"[0-9.]{81}", puzzle_str):
+            puzzle_rows = [puzzle_str[i * 9 : (i + 1) * 9] for i in range(9)]
+        else:
+            puzzle_rows = _parse_board_string(puzzle_str)
     else:
-        raise ValueError("Puzzle must be a single 81-character string or a list of 9 strings of length 9.")
+        raise ValueError("Puzzle must be a nested array of rows or a single string board.")
 
     board = _parse_puzzle(puzzle_rows)
     _validate_initial_board(board)
@@ -28,6 +58,23 @@ def run(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     solution = ["".join(str(cell) for cell in row) for row in board]
     return {"solution": solution}
+
+
+def _parse_board_string(board_text: str) -> List[str]:
+    rows: List[str] = []
+    for raw_line in board_text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("+") or stripped.startswith("-"):
+            continue
+        cleaned = re.sub(r"[|+\-\s]", "", stripped).replace("0", ".")
+        if cleaned:
+            rows.append(cleaned)
+
+    if len(rows) != 9 or any(len(row) != 9 for row in rows):
+        raise ValueError(
+            "If puzzle is a string, it must be either an 81-character board or a multiline 9x9 board with optional separators."
+        )
+    return rows
 
 
 def _parse_puzzle(rows: List[str]) -> List[List[int]]:
@@ -48,27 +95,55 @@ def _parse_puzzle(rows: List[str]) -> List[List[int]]:
 
 
 def _validate_initial_board(board: List[List[int]]) -> None:
-    for index in range(9):
-        row_values = [value for value in board[index] if value != 0]
-        if len(row_values) != len(set(row_values)):
-            raise ValueError(f"Invalid puzzle: duplicate value found in row {index + 1}.")
+    duplicate_error = _find_duplicate(board)
+    if duplicate_error is not None:
+        raise ValueError(duplicate_error)
 
-        col_values = [board[r][index] for r in range(9) if board[r][index] != 0]
-        if len(col_values) != len(set(col_values)):
-            raise ValueError(f"Invalid puzzle: duplicate value found in column {index + 1}.")
+
+def _find_duplicate(board: List[List[int]]) -> Optional[str]:
+    for row in range(9):
+        seen: Dict[int, List[int]] = defaultdict(list)
+        for col, value in enumerate(board[row]):
+            if value != 0:
+                seen[value].append(col)
+        for value, cols in seen.items():
+            if len(cols) > 1:
+                positions = ", ".join(f"column {col + 1}" for col in cols)
+                return (
+                    f"Invalid puzzle: duplicate value {value} found in row {row + 1} at {positions}."
+                )
+
+    for col in range(9):
+        seen: Dict[int, List[int]] = defaultdict(list)
+        for row in range(9):
+            value = board[row][col]
+            if value != 0:
+                seen[value].append(row)
+        for value, rows in seen.items():
+            if len(rows) > 1:
+                positions = ", ".join(f"row {row + 1}" for row in rows)
+                return (
+                    f"Invalid puzzle: duplicate value {value} found in column {col + 1} at {positions}."
+                )
 
     for box_row in range(3):
         for box_col in range(3):
-            box_values: List[int] = []
+            seen: Dict[int, List[tuple[int, int]]] = defaultdict(list)
             for row in range(box_row * 3, box_row * 3 + 3):
                 for col in range(box_col * 3, box_col * 3 + 3):
                     value = board[row][col]
                     if value != 0:
-                        box_values.append(value)
-            if len(box_values) != len(set(box_values)):
-                raise ValueError(
-                    f"Invalid puzzle: duplicate value found in 3x3 box starting at row {box_row * 3 + 1}, column {box_col * 3 + 1}."
-                )
+                        seen[value].append((row, col))
+            for value, coords in seen.items():
+                if len(coords) > 1:
+                    positions = ", ".join(
+                        f"(row {r + 1}, column {c + 1})" for r, c in coords
+                    )
+                    return (
+                        f"Invalid puzzle: duplicate value {value} found in 3x3 box starting at row {box_row * 3 + 1}, column {box_col * 3 + 1} at positions {positions}."
+                    )
+
+    return None
 
 
 def _solve(board: List[List[int]]) -> bool:
@@ -87,7 +162,7 @@ def _solve(board: List[List[int]]) -> bool:
     return False
 
 
-def _find_empty(board: List[List[int]]) -> tuple[int, int] | None:
+def _find_empty(board: List[List[int]]) -> Optional[Tuple[int, int]]:
     for row in range(9):
         for col in range(9):
             if board[row][col] == 0:

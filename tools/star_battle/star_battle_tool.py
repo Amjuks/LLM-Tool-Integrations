@@ -47,30 +47,38 @@ def _solve_star_battle(grid: List[List[str]], stars_per_region: int) -> Optional
     expected_region_count = stars_per_region
     region_ids = list(region_cells.keys())
     row_solution: List[List[bool]] = [[False] * cols for _ in range(rows)]
+    row_counts = [0] * rows
     col_counts = [0] * cols
     region_counts = {region: 0 for region in region_ids}
 
     def can_place(r: int, c: int) -> bool:
-        if any(row_solution[x][c] for x in range(rows)):
+        if col_counts[c] >= expected_region_count:
             return False
-        if any(row_solution[r][x] for x in range(cols)):
+        if row_counts[r] >= expected_region_count:
             return False
-        for dr in (-1, 0, 1):
-            for dc in (-1, 0, 1):
-                if dr == 0 and dc == 0:
-                    continue
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < rows and 0 <= nc < cols and row_solution[nr][nc]:
-                    return False
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and row_solution[nr][nc]:
+                return False
+        return True
+
+    def selection_is_valid(selection: Tuple[int, ...]) -> bool:
+        for i in range(1, len(selection)):
+            if abs(selection[i] - selection[i - 1]) == 1:
+                return False
         return True
 
     def backtrack(row: int) -> bool:
         if row == rows:
+            if any(count != expected_region_count for count in col_counts):
+                return False
             return all(count == expected_region_count for count in region_counts.values())
 
         available_cols = [c for c in range(cols) if can_place(row, c)]
         for selection in combinations(range(cols), expected_region_count):
             if any(c not in available_cols for c in selection):
+                continue
+            if not selection_is_valid(selection):
                 continue
             selected_regions: Dict[str, int] = {}
             valid = True
@@ -84,12 +92,14 @@ def _solve_star_battle(grid: List[List[str]], stars_per_region: int) -> Optional
                 continue
             for c in selection:
                 row_solution[row][c] = True
+                row_counts[row] += 1
                 col_counts[c] += 1
                 region_counts[grid[row][c]] += 1
             if backtrack(row + 1):
                 return True
             for c in selection:
                 row_solution[row][c] = False
+                row_counts[row] -= 1
                 col_counts[c] -= 1
                 region_counts[grid[row][c]] -= 1
         return False

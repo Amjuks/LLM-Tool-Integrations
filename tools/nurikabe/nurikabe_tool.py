@@ -11,9 +11,11 @@ def run(input_data: Dict[str, Any]) -> Dict[str, Any]:
     width = None
     clues: List[Dict[str, Any]] = []
     for row_index, row in enumerate(grid):
+        if isinstance(row, list):
+            row = "".join(str(cell).strip() for cell in row)
         if not isinstance(row, str):
             raise ValueError(f"Grid row {row_index + 1} must be a string.")
-        row = row.strip()
+        row = "".join(row.split())
         if width is None:
             width = len(row)
         if len(row) != width:

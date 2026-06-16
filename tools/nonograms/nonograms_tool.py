@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def run(input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -85,7 +85,10 @@ def _line_matches_clue(line: List[bool], clue: List[int], complete: bool) -> boo
     return True
 
 
-def _solve_nonogram(row_patterns: List[List[List[bool]]], col_clues: List[List[int]]) -> List[List[bool]] | None:
+def _solve_nonogram(
+    row_patterns: List[List[List[bool]]],
+    col_clues: List[List[int]],
+) -> Optional[List[List[bool]]]:
     rows = len(row_patterns)
     cols = len(col_clues)
     solution: List[List[bool]] = []

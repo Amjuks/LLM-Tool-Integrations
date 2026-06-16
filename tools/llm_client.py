@@ -1,17 +1,19 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from tools.session_logger import SessionLogger
 
 
 class LLMClient:
-    def __init__(self) -> None:
+    def __init__(self, logger: Optional[SessionLogger] = None) -> None:
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.base_url = os.getenv("OPENAI_BASE_URL", "").strip()
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+        self.logger = logger
 
         if not self.api_key:
             raise EnvironmentError("OPENAI_API_KEY is required. Copy .env.example to .env and set the API key.")
@@ -22,7 +24,12 @@ class LLMClient:
 
         self.client = OpenAI(**client_args)
 
-    def query_tool_selection(self, prompt: str, registry: Dict[str, Any], history: list[dict[str, str]] | None = None) -> str:
+    def query_tool_selection(
+        self,
+        prompt: str,
+        registry: Dict[str, Any],
+        history: Optional[List[Dict[str, str]]] = None,
+    ) -> str:
         instruction = self._build_tool_selection_instruction(prompt, registry)
         response = self._send_chat_request(instruction, history)
         return response
@@ -32,9 +39,9 @@ class LLMClient:
         prompt: str,
         tool_name: str,
         tool_schema: Dict[str, Any],
-        previous_response: str | None = None,
-        validation_errors: str | None = None,
-        history: list[dict[str, str]] | None = None,
+        previous_response: Optional[str] = None,
+        validation_errors: Optional[str] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         if previous_response is None:
             instruction = self._build_tool_input_instruction(prompt, tool_name, tool_schema)
@@ -52,11 +59,11 @@ class LLMClient:
     def query_final_response(
         self,
         prompt: str,
-        selection: Dict[str, Any] | None,
-        tool_output: Dict[str, Any] | None,
+        selection: Optional[Dict[str, Any]],
+        tool_output: Optional[Dict[str, Any]],
         analysis_response: str,
-        tool_error: str | None = None,
-        history: list[dict[str, str]] | None = None,
+        tool_error: Optional[str] = None,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         messages = [
             {
@@ -94,10 +101,12 @@ class LLMClient:
                     "Return JSON with the following fields:\n"
                     "- tool_required: true or false\n"
                     "- tool_name: the tool name if required, otherwise null\n"
-                    "- tool_input: {} (tool input will be generated in a second AI call after selection)\n\n"
-                    "Only decide whether the prompt requires a tool and which tool should be used. "
-                    "Do not perform schema-specific input normalization in this step. "
-                    "If a tool is selected, tool_input must be {} and a separate AI call will format it to the tool schema."
+                    "- tool_input: an object matching the tool input schema if a tool is required, otherwise {}\n\n"
+                    "If a tool is required, include a fully normalized tool_input object that conforms to the selected tool's schema. "
+                    "Validate the tool_input against the schema before returning it. "
+                    "For board-like puzzles, preserve every cell and return exactly the required row lengths and characters. "
+                    "Do not include any explanatory text outside the JSON object. "
+                    "If the prompt does not require a tool, set tool_name to null and tool_input to {}."
                 ),
             },
         ]
@@ -126,6 +135,8 @@ class LLMClient:
                     "Interpret the prompt and normalize the user input into the exact structure required by the schema. "
                     "Return only a JSON object that conforms exactly to the schema, with all required fields present. "
                     "If the user prompt contains a drawn board or grid with separators (such as |, +, -, spaces), ignore those characters and map the data into the schema fields. "
+                    "For Sudoku, return exactly one field named puzzle, and make it an array of 9 arrays of 9 strings. "
+                    "Each string must be a single character: digits 1-9, '.' or '0' for blank cells. "
                     "If the prompt includes a parsed board section, use those values exactly. "
                     "Do not include any extra properties, comments, or text outside the JSON object."
                 ),
@@ -138,8 +149,8 @@ class LLMClient:
         tool_name: str,
         tool_schema: Dict[str, Any],
         previous_response: str,
-        validation_errors: str | None,
-    ) -> list[dict[str, str]]:
+        validation_errors: Optional[str],
+    ) -> List[Dict[str, str]]:
         return [
             {
                 "role": "system",
@@ -161,6 +172,7 @@ class LLMClient:
                     f"{validation_errors}\n\n"
                     "Produce a corrected JSON object that conforms exactly to the tool schema. "
                     "Use the exact schema field names and convert any drawn board, separator-based grid, or natural language clues into the required JSON structure. "
+                    "For Sudoku, the puzzle field must be an array of 9 arrays of 9 strings, each string being a single digit 1-9, '.' or '0'. "
                     "If the prompt includes a parsed board section, use those values exactly. "
                     "Do not infer fields beyond those defined by the tool schema. "
                     "Do not include any extra properties, comments, or text outside the JSON object."
@@ -171,10 +183,10 @@ class LLMClient:
     def _build_final_response_instruction(
         self,
         prompt: str,
-        selection: Dict[str, Any] | None,
-        tool_output: Dict[str, Any] | None,
+        selection: Optional[Dict[str, Any]],
+        tool_output: Optional[Dict[str, Any]],
         analysis_response: str,
-        tool_error: str | None = None,
+        tool_error: Optional[str] = None,
     ) -> str:
         payload = {
             "original_prompt": prompt,
@@ -186,20 +198,43 @@ class LLMClient:
         return (
             "Use the following data to produce a final answer for the user. "
             "If a tool output is available, integrate it into the response. "
-            "If there was an error during tool execution, explain it clearly and professionally. "
-            "Do not invent additional tool results.\n\n"
+            "If there was an error during tool execution, include the exact tool_error string verbatim and explain it in context. "
+            "Do not invent additional tool results. "
+            "Do not soften or paraphrase the precise tool failure details.\n\n"
             + json.dumps(payload, indent=2)
         )
 
-    def _send_chat_request(self, messages: list[dict[str, str]], history: list[dict[str, str]] | None = None) -> str:
+    def _send_chat_request(
+        self,
+        messages: List[Dict[str, str]],
+        history: Optional[List[Dict[str, str]]] = None,
+    ) -> str:
         combined_messages = []
         if history:
             combined_messages.extend(history)
         combined_messages.extend(messages)
+
+        if self.logger is not None:
+            self.logger.log_event("openai_api_request", {
+                "model": self.model,
+                "messages": combined_messages,
+                "temperature": 0,
+                "max_tokens": 800,
+            })
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=combined_messages,
             temperature=0,
             max_tokens=800,
         )
+
+        response_payload = {
+            "model": getattr(response, "model", None),
+            "usage": getattr(response, "usage", None),
+            "content": response.choices[0].message.content.strip() if response.choices else None,
+        }
+        if self.logger is not None:
+            self.logger.log_event("openai_api_response", response_payload)
+
         return response.choices[0].message.content.strip()

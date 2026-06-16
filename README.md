@@ -7,6 +7,7 @@ A minimal Python-based LLM tool ecosystem with modular tool discovery, registry-
 - Centralized `tools/registry.json` in strict JSON format
 - Modular tool execution with per-tool schema validation
 - OpenAI API support only
+- Single LLM dispatch call can select a tool and normalize tool input in one response
 - Regex-safe JSON extraction from model responses
 - Colored terminal pipeline logs
 

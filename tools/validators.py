@@ -38,14 +38,13 @@ def validate_tool_dispatch(selection: Any, registry: Dict[str, Any]) -> Dict[str
     if tool_required:
         if not tool_name or not isinstance(tool_name, str):
             raise ValueError("tool_name is required when tool_required is true.")
-        if tool_input is not None and not isinstance(tool_input, dict):
+        if tool_input is None:
+            tool_input = {}
+        elif not isinstance(tool_input, dict):
             raise ValueError("tool_input must be an object.")
         tool = next((tool for tool in registry.get("tools", []) if tool.get("name") == tool_name), None)
         if tool is None:
             raise ValueError(f"Tool '{tool_name}' is not present in the registry.")
-        # Ignore any partial tool_input supplied during tool selection.
-        # A second AI call will format the final tool_input exactly to the selected tool schema.
-        tool_input = {}
     else:
         tool_name = None
         tool_input = {}

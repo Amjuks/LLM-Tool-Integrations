@@ -4,16 +4,21 @@
       "domain": "puzzle",
       "name": "sudoku_solver",
       "module": "tools.sudoku.sudoku_tool",
-      "description": "Solve a 9x9 Sudoku puzzle from a list of rows with digits and empty cells.",
+      "description": "Solve a 9x9 Sudoku puzzle from a fixed nested array board format.",
       "input_schema": {
         "type": "object",
         "properties": {
           "puzzle": {
             "type": "array",
-            "description": "Nine rows representing the Sudoku board. Use digits 1-9 and 0 or . for blanks.",
+            "description": "Nine rows representing the Sudoku board. Each row is an array of 9 single-character strings: digits 1-9 or '.'/'0' for empty cells.",
             "items": {
-              "type": "string",
-              "pattern": "^[0-9.]{9}$"
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9.]$"
+              },
+              "minItems": 9,
+              "maxItems": 9
             },
             "minItems": 9,
             "maxItems": 9
